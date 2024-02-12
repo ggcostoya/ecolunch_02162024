@@ -1,0 +1,214 @@
+---
+title: "Easy data processing with R"
+subtitle: "EECB EcoLunch"
+author: "Guillermo Garcia Costoya"
+date: "2024-02-16"
+output: 
+  html_document:
+    theme: simplex
+    toc: true
+    toc_float: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## **Overview**
+
+
+## **Loading necessary packages**
+
+For this vignette, we will only need to load a single package: `tidyverse`. 
+
+```{r}
+library(tidyverse) 
+```
+
+As you can see from above, by loading the `tidyverse` you load a number of different packages that are useful for many kinds of data transformations. With one line of code, you load all the packages you need. 
+
+> **TIP**: If you have not installed some of these packages, by running `install.packages("tidyverse")` you will be able to install them all at once. 
+
+
+## **The `pivot` and `mutate` functions**
+
+```{r}
+# load forest data
+load("data/forest_data.RData")
+
+# view forest data
+forest_data
+```
+
+
+```{r}
+# pivot longer all columns
+forest_data %>% 
+  pivot_longer(cols = everything(), names_to = "forest", values_to = "height")
+```
+
+```{r}
+# using mutate to add a year column and pivoting longer all columns except year
+forest_data %>% 
+  mutate(year = seq(1,100, by = 1)) %>% 
+  pivot_longer(!year, names_to = "forest", values_to = "height")
+```
+
+```{r}
+# pivotted longer dataset
+forest_data_long <- forest_data %>% 
+  mutate(year = seq(1,100, by = 1)) %>% 
+  pivot_longer(!year, names_to = "forest", values_to = "height")
+
+# pivot wider to go back to the original
+forest_data_long %>% pivot_wider(names_from = forest, values_from = height)
+```
+
+
+```{r}
+# plotting all raw data by forest
+forest_data %>% 
+  pivot_longer(cols = everything(), names_to = "forest", values_to = "height") %>%
+  ggplot(aes(x = forest, y = height)) +
+  geom_jitter(width = 0.1) +
+  stat_summary(col = "red")
+  
+```
+
+
+```{r}
+# plotting time series
+forest_data %>% 
+  mutate(year = seq(1,100, by = 1)) %>% 
+  pivot_longer(!year, names_to = "forest", values_to = "height") %>%
+  ggplot(aes(x = year, y = height, col = forest)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+
+## **The `select`, `filter`, `group` and `summarise` functions**
+
+```{r}
+# load forest data
+load("data/lake_data.RData")
+
+# view forest data
+lake_data
+```
+
+```{r}
+# creating a new column by dividing N concentration by a 100 with `mutate`
+lake_data %>% mutate(nitrogen_concentration = nitrogen / 100)
+```
+
+```{r}
+# selecting only some columns with `select`
+lake_data %>% dplyr::select(lake, date, nitrogen)
+```
+
+```{r}
+# subset data for only (==) lake A using `filter`
+lake_data %>% filter(lake == "A")
+```
+
+```{r}
+# subset data excluding (!=) lake B using `filter`
+lake_data %>% filter(lake != "A")
+```
+
+```{r}
+# subset data for lakes "B" and "C" (%in%) using `filter`
+lake_data %>% filter(lake %in% c("B", "C"))
+```
+
+```{r}
+# grouping the data by lake and getting the average N and Cl concentrations using `summarise`
+lake_data %>% group_by(lake) %>% summarise(N = mean(nitrogen), Cl = mean(chlorine))
+```
+
+```{r}
+# plotting N concentrations over time. 
+lake_data %>% 
+  ggplot(aes(x = date, y = nitrogen/100, col = lake)) +
+  geom_line()
+```
+
+```{r}
+# plotting chlorine concentrations over time
+lake_data %>% 
+  ggplot(aes(x = date, y = chlorine/100, col = lake)) +
+  geom_line() +
+  geom_hline(yintercept = 0) # horizontal line indicating zero. 
+```
+
+```{r}
+# plotting chlorine 
+lake_data %>% 
+  filter(chlorine > 0) %>%
+  ggplot(aes(x = date, y = chlorine/100, col = lake)) +
+  geom_line() +
+  geom_hline(yintercept = 0)
+```
+
+## **The `map` function**
+
+```{r}
+# using the `map` function to run a linear model for each lake separately
+lake_data %>% 
+  split(lake_data$lake) %>% 
+  map(\(df) lm(nitrogen/100 ~ date, data = df)) %>%
+  map(summary) # map can also be used to show the summary of the model 
+```
+
+## **Dealing with dates with `lubridate` and a real example**
+
+```{r}
+# loading data
+load("data/lizards.RData")
+
+# showing data
+lizards
+```
+```{r}
+# loading the lubridate package
+library(lubridate)
+
+# re-formatting date column
+lizards$date <- mdy(lizards$date)
+
+# re-formatting time column
+lizards$time <- hm(lizards$time)
+
+lizards
+```
+
+
+```{r}
+# generating a DOY (day of year column)
+lizards$doy <- yday(lizards$date)
+
+# generating a MOD (minute of day column)
+lizards$mod <- hour(lizards$time)*60 + minute(lizards$time)
+```
+
+```{r}
+# plotting density
+lizards %>% 
+  ggplot(aes(x = mod/60, fill = site)) +
+  geom_density(alpha = 0.5) +
+  ylab("Density") + xlab("Hour of the day")
+```
+
+```{r}
+# get an hour column from the mod column using mutate, group by site and hour, get total observations and plot
+lizards %>% 
+  mutate(hour = round(mod/60)) %>% 
+  group_by(site, hour) %>% 
+  summarise(total_obs = n()) %>%
+  ggplot(aes(x = hour,y = total_obs, fill = site)) +
+  geom_col(position = "dodge2") +
+  ylab("Total Observations") + xlab("Hour of the day")
+```
+
